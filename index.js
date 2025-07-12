@@ -1,42 +1,44 @@
 const express = require('express');
-const axios = require('axios');
+const bodyParser = require('body-parser');
+const twilio = require('twilio');
 require('dotenv').config();
 
 const app = express();
-app.use(express.json());
 const port = process.env.PORT || 3000;
 
-app.post('/webhook', async (req, res) => {
-  const { origin, destination, phone } = req.body;
+// Twilio config
+const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+const twilioNumber = process.env.TWILIO_PHONE_NUMBER;
 
-  try {
-    const apiKey = process.env.GOOGLE_API_KEY;
-    const response = await axios.get(`https://maps.googleapis.com/maps/api/directions/json`, {
-      params: {
-        origin,
-        destination,
-        key: apiKey
-      }
-    });
+app.use(bodyParser.urlencoded({ extended: false }));
 
-    const route = response.data.routes[0].legs[0];
-    const distance = route.distance.text;
-    const duration = route.duration.text;
+// Webhook route
+app.post('/webhook', (req, res) => {
+  const incomingMsg = req.body.Body;
+  const sender = req.body.From;
 
-    const message = `Trajet de ${origin} à ${destination} : ${distance}, durée estimée ${duration}.`;
+  console.log(`Message reçu de ${sender} : ${incomingMsg}`);
 
-    console.log('Message envoyé :', message);
+  let responseMsg = "Bienvenue sur MobiVerse 🚀. Merci pour votre message.";
 
-    // Optionnel : ici tu peux utiliser Twilio pour envoyer le message au téléphone
-    // await sendSMS(phone, message); // à activer plus tard
-
-    res.json({ success: true, message });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  // Exemple de logique personnalisée
+  if (incomingMsg.toLowerCase().includes("bonjour")) {
+    responseMsg = "Bonjour ! 👋 Que puis-je faire pour vous aujourd'hui ?";
   }
+
+  twilioClient.messages.create({
+    body: responseMsg,
+    from: twilioNumber,
+    to: sender
+  });
+
+  res.send('<Response></Response>');
+});
+
+app.get('/', (req, res) => {
+  res.send('Serveur MobiVerse Webhook opérationnel ✅');
 });
 
 app.listen(port, () => {
-  console.log(`Serveur webhook en ligne sur le port ${port}`);
+  console.log(`Serveur en écoute sur http://localhost:${port}`);
 });
