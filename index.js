@@ -7,6 +7,11 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 10000;
 
+// Middleware nécessaire
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+app.use(bodyParser.text());
+
 // Twilio
 const client = twilio(
   process.env.TWILIO_ACCOUNT_SID,
@@ -16,10 +21,8 @@ const fromNumber = process.env.TWILIO_PHONE_NUMBER;
 
 // OpenAI
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // clé stockée dans Render (jamais dans le code)
+  apiKey: process.env.OPENAI_API_KEY,
 });
-
-app.use(bodyParser.urlencoded({ extended: false }));
 
 // Webhook principal
 app.post('/webhook', async (req, res) => {
@@ -32,33 +35,37 @@ app.post('/webhook', async (req, res) => {
 
   const msg = incomingMsg.toLowerCase();
 
-  // Réponses simples prédéfinies
-  if (msg.includes('bonjour')) {
-    responseMsg = "👋 Bonjour ! Comment puis-je vous aider aujourd’hui ?";
-  } else if (msg.includes('casablanca')) {
-    responseMsg = "📍 Casablanca : voici les options de transport à venir…";
-  } else if (msg.includes('prix')) {
-    responseMsg = "💰 Les prix dépendent de la distance. Veuillez préciser le trajet.";
-  } else if (msg.includes('merci')) {
-    responseMsg = "🙏 Avec plaisir ! L’équipe MobiVerse reste disponible.";
-  } else {
-    // Si aucune réponse simple ne correspond → passer par GPT
+  const motsCles = {
+    bonjour: "👋 Bonjour ! Comment puis-je vous aider aujourd’hui ?",
+    casablanca: "📍 Casablanca : voici les options de transport à venir…",
+    prix: "💰 Les prix dépendent de la distance. Veuillez préciser le trajet.",
+    merci: "🙏 Avec plaisir ! L’équipe MobiVerse reste disponible.",
+  };
+
+  let found = false;
+  for (const mot in motsCles) {
+    if (msg.includes(mot)) {
+      responseMsg = motsCles[mot];
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
     try {
       const completion = await openai.chat.completions.create({
-        model: "gpt-4", // Tu peux changer en "gpt-3.5-turbo" si besoin
+        model: "gpt-4",
         messages: [{ role: "user", content: incomingMsg }],
         temperature: 0.7,
         max_tokens: 100,
       });
-
       responseMsg = completion.choices[0].message.content;
     } catch (err) {
       console.error("❌ Erreur GPT :", err.message);
-      responseMsg = "🤖 Je n’ai pas pu répondre pour l’instant. Réessayez dans un instant.";
+      responseMsg = "🤖 Je n’ai pas pu répondre pour l’instant.";
     }
   }
 
-  // Envoi de la réponse par SMS via Twilio
   try {
     await client.messages.create({
       body: responseMsg,
@@ -68,7 +75,7 @@ app.post('/webhook', async (req, res) => {
 
     console.log(`✅ Réponse envoyée à ${sender}`);
   } catch (error) {
-    console.error('❌ Erreur d’envoi Twilio :', error.message);
+    console.error('❌ Erreur Twilio :', error.message);
   }
 
   res.set('Content-Type', 'text/xml');
